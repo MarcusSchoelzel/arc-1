@@ -41,11 +41,11 @@ function appModuleDescriptor(): Record<string, any> {
   return appModule as Record<string, any>;
 }
 
-function xsuaaResourceDescriptor(): Record<string, any> {
+function resourceDescriptor(name: string): Record<string, any> {
   const mta = parse(readFileSync(join(ROOT, 'mta.yaml'), 'utf8')) as Record<string, any>;
-  const xsuaa = (mta.resources as Array<Record<string, any>>).find((resource) => resource.name === 'arc1-xsuaa');
-  expect(xsuaa, 'arc1-xsuaa resource missing from mta.yaml').toBeDefined();
-  return xsuaa as Record<string, any>;
+  const resource = (mta.resources as Array<Record<string, any>>).find((entry) => entry.name === name);
+  expect(resource, `${name} resource missing from mta.yaml`).toBeDefined();
+  return resource as Record<string, any>;
 }
 
 /** Base ∪ mtaext, the way multiapps-controller merges it: override wins, nothing is removed. */
@@ -84,6 +84,8 @@ describe('shipped mta.yaml resolves through the config parser', () => {
     const config = resolveWithOverrides();
 
     expect(config.transport).toBe('http-streamable');
+    expect(process.env.OPTIMIZE_MEMORY).toBe('true');
+    expect(appModuleDescriptor().parameters?.command).toBe('exec sh ./bin/start-cf.sh');
     expect(process.env.SAP_BTP_DESTINATION).toBeUndefined();
     expect(process.env.SAP_BTP_PP_DESTINATION).toBeUndefined();
     expect(config.ppEnabled).toBe(true);
@@ -169,7 +171,7 @@ describe('shipped mta.yaml resolves through the config parser', () => {
 
     expect(ignored).toEqual(
       expect.arrayContaining([
-        '.env.*',
+        '.env*',
         '.npmrc',
         '*service-key*.json',
         '*.key',
@@ -196,17 +198,30 @@ describe('shipped mta.yaml resolves through the config parser', () => {
     );
   });
 
-  it('scopes XSUAA upstream callbacks to the deployment-owned app route', () => {
-    const xsuaa = xsuaaResourceDescriptor();
-    const redirectUris = xsuaa.parameters?.config?.['oauth2-configuration']?.['redirect-uris'];
-    const fileConfig = JSON.parse(readFileSync(join(ROOT, 'xs-security.json'), 'utf8')) as Record<string, any>;
-
-    expect(redirectUris).toEqual(['http://localhost:*/**', '~{arc1-mcp-api/url}/**']);
-    expect(xsuaa.requires).toEqual([{ name: 'arc1-mcp-api' }]);
-    expect(fileConfig['oauth2-configuration']['redirect-uris']).toEqual(['http://localhost:*/**']);
-    expect(JSON.stringify({ redirectUris, fileConfig })).not.toMatch(
-      /\*\.(?:hana\.ondemand\.com|applicationstudio\.cloud\.sap)/,
+  it('keeps Audit Log optional while preconfiguring X.509 on the instance and binding', () => {
+    const resource = resourceDescriptor('arc1-auditlog');
+    const requirement = (appModuleDescriptor().requires as Array<Record<string, any>>).find(
+      (entry) => entry.name === 'arc1-auditlog',
     );
+
+    expect(resource.active).toBe(false);
+    expect(resource.parameters).toMatchObject({
+      service: 'auditlog',
+      'service-plan': 'premium',
+      config: {
+        'xs-security': {
+          'oauth2-configuration': {
+            'credential-types': ['x509'],
+            'grant-types': ['client_credentials'],
+          },
+        },
+      },
+    });
+    expect(requirement?.parameters?.config).toMatchObject({
+      xsuaa: {
+        'credential-type': 'x509',
+      },
+    });
   });
 
   it('falls back to the basic destination when an override blanks the PP destination', () => {
