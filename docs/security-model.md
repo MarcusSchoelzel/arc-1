@@ -280,7 +280,8 @@ if the change is *in* one of them.
   R8), so `\`/`#`/`?` can no longer relocate the parsed host past a wildcard. XSUAA's upstream
   callback list is separately restricted to deployment-owned ARC-1/AppRouter routes; the runtime
   manual-client list contains only fixed client hosts and native callbacks, with no shared CF/BAS
-  platform wildcard. DCR clients remain exact-bound in their signed client ids.
+  platform wildcard. DCR clients remain exact-bound in their signed client ids. This binding does not establish
+  user consent to a newly registered client; per-client proxy consent is a separate concern.
   [`src/server/http.ts`](../src/server/http.ts),
   [`src/server/oauth-redirect-policy.ts`](../src/server/oauth-redirect-policy.ts).
 - **SSRF** — the SAP host is admin-fixed (config / service key / destination); no tool arg reaches

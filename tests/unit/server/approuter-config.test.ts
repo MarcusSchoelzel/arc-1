@@ -7,10 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { parse, stringify } from 'yaml';
 
 const execFileAsync = promisify(execFile);
-// biome-ignore lint/suspicious/noTemplateCurlyInString: MTA resolves this placeholder at deployment time.
-const UI_HOST = 'arc1-ui-${space-guid}';
-// biome-ignore lint/suspicious/noTemplateCurlyInString: MTA resolves these placeholders at deployment time.
-const UI_REDIRECT_URI = 'https://arc1-ui-${space-guid}.${default-domain}/**';
+// biome-ignore lint/suspicious/noTemplateCurlyInString: resolved by the deployment service.
+const UI_REDIRECT_URI = 'https://arc1-ui-${space-guid}.${default-domain}/login/callback';
 
 describe('BTP UI AppRouter config', () => {
   it('pins patched transitive dependencies on an AppRouter-supported Node release', async () => {
@@ -140,12 +138,20 @@ describe('BTP UI AppRouter config', () => {
     const xsuaa = extension.resources.find((resource: Record<string, any>) => resource.name === 'arc1-xsuaa');
     const redirects = xsuaa.parameters.config['oauth2-configuration']['redirect-uris'];
 
-    expect(router.parameters.host).toBe(UI_HOST);
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: resolved by the deployment service.
+    expect(router.parameters.host).toBe('arc1-ui-${space-guid}');
     expect(xsuaa.requires).toEqual([{ name: 'arc1-mcp-api' }]);
-    expect(redirects).toEqual(['http://localhost:*/**', '~{arc1-mcp-api/url}/**', UI_REDIRECT_URI]);
+    expect(redirects).toEqual([
+      '~{arc1-mcp-api/url}/oauth/callback',
+      '~{arc1-mcp-api/url}/oauth/logged-out',
+      UI_REDIRECT_URI,
+    ]);
+    const base = parse(await readFile('mta.yaml', 'utf8'));
+    const baseRouter = base.modules.find((module: Record<string, any>) => module.name === 'arc1-ui-router');
+    expect(baseRouter.parameters.host).toBeUndefined();
   });
 
-  it('adds both deployment routes to the generated UI extension without discarding operator config', async () => {
+  it('preserves restrictive operator config and a custom UI host when adding the UI callback', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'arc1-ui-mtaext-'));
     const inputPath = join(tempDir, 'input.mtaext');
     const outputPath = join(tempDir, 'output.mtaext');
@@ -153,6 +159,7 @@ describe('BTP UI AppRouter config', () => {
       '_schema-version': '3.1',
       ID: 'operator-overrides',
       extends: 'arc1-mcp',
+      modules: [{ name: 'arc1-ui-router', parameters: { host: 'operator-ui', memory: '256M' } }],
       resources: [
         {
           name: 'arc1-xsuaa',
@@ -160,7 +167,9 @@ describe('BTP UI AppRouter config', () => {
             config: {
               xsappname: 'operator-owned-name',
               'oauth2-configuration': {
-                'redirect-uris': ['https://api.example.test/arc1/**'],
+                'redirect-uris': ['https://api.example.test/arc1/oauth/callback'],
+                'grant-types': ['authorization_code'],
+                'token-validity': 600,
               },
             },
           },
@@ -177,15 +186,72 @@ describe('BTP UI AppRouter config', () => {
 
       expect(xsuaa.parameters.config.xsappname).toBe('operator-owned-name');
       expect(redirects).toEqual([
-        'https://api.example.test/arc1/**',
-        'http://localhost:*/**',
-        '~{arc1-mcp-api/url}/**',
-        UI_REDIRECT_URI,
+        'https://api.example.test/arc1/oauth/callback',
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: resolved by the deployment service.
+        'https://operator-ui.${default-domain}/login/callback',
       ]);
+      expect(xsuaa.parameters.config['oauth2-configuration']['grant-types']).toEqual(['authorization_code']);
+      expect(xsuaa.parameters.config['oauth2-configuration']['token-validity']).toBe(600);
       expect(
         generated.modules.find((module: Record<string, any>) => module.name === 'arc1-ui-router').parameters.host,
-      ).toBe(UI_HOST);
+      ).toBe('operator-ui');
       expect(xsuaa.requires).toEqual([{ name: 'arc1-mcp-api' }]);
+      await execFileAsync(process.execPath, ['scripts/btp/prepare-ui-mtaext.mjs', outputPath, outputPath]);
+      expect(parse(await readFile(outputPath, 'utf8'))).toEqual(generated);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the shipped OAuth defaults when no operator extension exists', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'arc1-ui-mtaext-'));
+    try {
+      const outputPath = join(tempDir, 'output.mtaext');
+      await execFileAsync(process.execPath, [
+        'scripts/btp/prepare-ui-mtaext.mjs',
+        join(tempDir, 'missing'),
+        outputPath,
+      ]);
+      const generated = parse(await readFile(outputPath, 'utf8'));
+      const shipped = parse(await readFile('mta-ui-approuter.mtaext', 'utf8'));
+      expect(generated.resources).toEqual(shipped.resources);
+      expect(generated.modules).toEqual(shipped.modules);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    {
+      parameters: { host: 'chosen-ui', domain: 'example.com' },
+      callbacks: ['https://chosen-ui.example.com/login/callback'],
+    },
+    {
+      parameters: { routes: [{ route: 'ui.example.com' }, { route: 'https://gateway.example.com/arc1/' }] },
+      callbacks: ['https://ui.example.com/login/callback', 'https://gateway.example.com/arc1/login/callback'],
+    },
+  ])('derives callbacks from the operator route settings: $parameters', async ({ parameters, callbacks }) => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'arc1-ui-routes-'));
+    try {
+      const inputPath = join(tempDir, 'input.mtaext');
+      const outputPath = join(tempDir, 'output.mtaext');
+      await writeFile(
+        inputPath,
+        stringify({
+          modules: [{ name: 'arc1-ui-router', parameters }],
+        }),
+      );
+      await execFileAsync(process.execPath, ['scripts/btp/prepare-ui-mtaext.mjs', inputPath, outputPath]);
+      const generated = parse(await readFile(outputPath, 'utf8'));
+      const oauth = generated.resources[0].parameters.config['oauth2-configuration'];
+      expect(oauth['redirect-uris']).toEqual([
+        '~{arc1-mcp-api/url}/oauth/callback',
+        '~{arc1-mcp-api/url}/oauth/logged-out',
+        ...callbacks,
+      ]);
+      expect(
+        generated.modules.find((module: Record<string, any>) => module.name === 'arc1-ui-router').parameters,
+      ).toMatchObject(parameters);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

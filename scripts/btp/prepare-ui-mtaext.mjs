@@ -26,16 +26,6 @@ function ensureModule(descriptor, name) {
   return module;
 }
 
-function ensureResource(descriptor, name) {
-  descriptor.resources = ensureArray(descriptor.resources);
-  let resource = descriptor.resources.find((entry) => entry && entry.name === name);
-  if (!resource) {
-    resource = { name };
-    descriptor.resources.push(resource);
-  }
-  return resource;
-}
-
 function ensureNamedEntry(owner, key, name) {
   owner[key] = ensureArray(owner[key]);
   let entry = owner[key].find((candidate) => candidate && candidate.name === name);
@@ -60,9 +50,29 @@ function withUiExtension(descriptor) {
     ...(router['build-parameters'] ?? {}),
     'supported-platforms': ['CF'],
   };
-  router.parameters = { ...(router.parameters ?? {}), host: 'arc1-ui-${space-guid}' };
-
-  const xsuaa = ensureResource(merged, 'arc1-xsuaa');
+  // Read the shipped descriptors so callback/grant defaults have one source.
+  const base = YAML.parse(readFileSync(new URL('../../mta.yaml', import.meta.url), 'utf8'));
+  const ui = YAML.parse(readFileSync(new URL('../../mta-ui-approuter.mtaext', import.meta.url), 'utf8'));
+  const baseOauth = base.resources.find((entry) => entry.name === 'arc1-xsuaa').parameters.config['oauth2-configuration'];
+  const uiXsuaa = ui.resources.find((entry) => entry.name === 'arc1-xsuaa');
+  const uiRouter = ui.modules.find((entry) => entry.name === 'arc1-ui-router');
+  router.parameters = { ...uiRouter.parameters, ...router.parameters };
+  // Explicit CF routes take precedence over host/domain. Derive callbacks only
+  // for routes this deploy actually maps, and never overwrite an operator host.
+  const routes = router.parameters.routes ?? [
+    `${router.parameters.host}.${router.parameters.domain ?? '${default-domain}'}`,
+  ];
+  const uiRedirects = routes.map((entry) => {
+    const route = typeof entry === 'string' ? entry : entry.route;
+    if (
+      typeof route !== 'string' || !route || route.startsWith('http://') || /[?#*]/.test(route) ||
+      /\$\{(?:default-url|default-uri|default-host|app-name)\}/.test(route)
+    ) {
+      throw new Error('UI routes must use explicit hostnames (or space/space-guid/default-domain placeholders).');
+    }
+    return `${(route.startsWith('https://') ? route : `https://${route}`).replace(/\/$/, '')}/login/callback`;
+  });
+  const xsuaa = ensureNamedEntry(merged, 'resources', 'arc1-xsuaa');
   const xsuaaConfig = xsuaa.parameters?.config ?? {};
   const existingOauth = xsuaaConfig['oauth2-configuration'] ?? {};
   xsuaa.parameters = {
@@ -70,29 +80,18 @@ function withUiExtension(descriptor) {
     config: {
       ...xsuaaConfig,
       'oauth2-configuration': {
+        ...baseOauth,
         ...existingOauth,
         'redirect-uris': [
           ...new Set([
-            ...ensureArray(existingOauth['redirect-uris']),
-            'http://localhost:*/**',
-            '~{arc1-mcp-api/url}/**',
-            'https://arc1-ui-${space-guid}.${default-domain}/**',
+            ...(existingOauth['redirect-uris'] ?? baseOauth['redirect-uris']),
+            ...uiRedirects,
           ]),
         ],
-        'grant-types': [
-          ...new Set([
-            ...ensureArray(existingOauth['grant-types']),
-            'authorization_code',
-            'refresh_token',
-            'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          ]),
-        ],
-        'token-validity': existingOauth['token-validity'] ?? 3600,
-        'refresh-token-validity': existingOauth['refresh-token-validity'] ?? 2592000,
       },
     },
   };
-  ensureNamedEntry(xsuaa, 'requires', 'arc1-mcp-api');
+  for (const requirement of uiXsuaa.requires) ensureNamedEntry(xsuaa, 'requires', requirement.name);
 
   return merged;
 }

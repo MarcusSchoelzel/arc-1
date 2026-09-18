@@ -12,9 +12,8 @@ modules:
       supported-platforms:
         - CF
     parameters:
-      # A space GUID is globally unique and URL-safe. Pinning the host lets the
-      # XSUAA resource register this exact optional route without a dependency
-      # that would strand the base (UI-disabled) descriptor.
+      # Extensions cannot add a resource dependency on this optional module.
+      # Use one globally unique host for the module and its XSUAA callback.
       host: arc1-ui-${space-guid}
 
 resources:
@@ -23,9 +22,9 @@ resources:
       config:
         oauth2-configuration:
           redirect-uris:
-            - http://localhost:*/**
-            - ~{arc1-mcp-api/url}/**
-            - https://arc1-ui-${space-guid}.${default-domain}/**
+            - ~{arc1-mcp-api/url}/oauth/callback
+            - ~{arc1-mcp-api/url}/oauth/logged-out
+            - https://arc1-ui-${space-guid}.${default-domain}/login/callback
           grant-types:
             - authorization_code
             - refresh_token

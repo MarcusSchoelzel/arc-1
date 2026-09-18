@@ -280,8 +280,8 @@ resources:
         # DCR callbacks are exact-bound in their signed client_id.
         oauth2-configuration:
           redirect-uris:
-            - http://localhost:*/**
-            - ~{arc1-mcp-api/url}/**
+            - ~{arc1-mcp-api/url}/oauth/callback
+            - ~{arc1-mcp-api/url}/oauth/logged-out
           grant-types:
             - authorization_code
             - refresh_token
