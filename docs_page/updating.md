@@ -2,11 +2,13 @@
 
 ## XSUAA callback hardening
 
-When adopting the callback hardening, perform a full MTA deployment so XSUAA and the app both
-receive the restricted policies. Normal MTA deployments require no new setting or client setup;
-the optional UI gets a deployment-owned default hostname (explicit routes are preserved).
-For custom gateways, manual services and existing
-callback overrides, follow [XSUAA upgrade guidance](xsuaa-setup.md#upgrading-an-existing-deployment).
+Standard MCP clients keep their URL and registration. Perform a full MTA deployment so XSUAA
+and the app both receive the restricted policies. Before upgrading, use the
+[XSUAA upgrade table](xsuaa-setup.md#upgrading-an-existing-deployment) for your setup.
+If you use the optional browser UI with its old default route,
+[pin that route first](xsuaa-setup.md#keep-an-existing-ui-url) to keep its address unchanged.
+Custom gateways and manual XSUAA services need their exact public callbacks registered;
+clients relying on an arbitrary CF/BAS callback with the shared client ID should switch to DCR.
 
 ## v1.1.0 — CLI/CI hardening compatibility changes
 
@@ -254,6 +256,8 @@ docker run -d --name arc1 -p 8080:8080 --env-file .env ghcr.io/arc-mcp/arc-1:0.6
 ```
 
 ---
+
+<a id="updating-on-btp"></a>
 
 ## BTP Cloud Foundry
 

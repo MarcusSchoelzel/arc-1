@@ -2,6 +2,9 @@
 
 This guide sets up BTP XSUAA authentication so MCP-native clients (Claude Desktop, Cursor, VS Code, MCP Inspector) can authenticate via OAuth when connecting to ARC-1.
 
+**Updating an existing installation?** Start with the [upgrade table](#upgrading-an-existing-deployment)
+to keep existing client settings and UI URLs working.
+
 ## Overview
 
 MCP-native clients use RFC 8414 OAuth discovery to find authorization endpoints at the MCP server's URL. ARC-1 proxies the OAuth flow to XSUAA using the MCP SDK's `ProxyOAuthServerProvider`.
@@ -50,9 +53,9 @@ Copy it and add the two exact URLs on which ARC-1 is publicly reachable:
 
 ```bash
 cp xs-security.json xs-security.landscape.json
-# Set oauth2-configuration.redirect-uris to the URLs below, using your public base URL.
-cf create-service xsuaa application arc1-xsuaa -c xs-security.landscape.json
 ```
+
+In the copied file, set `oauth2-configuration.redirect-uris` to your actual public URLs:
 
 ```json
 "redirect-uris": [
@@ -61,10 +64,18 @@ cf create-service xsuaa application arc1-xsuaa -c xs-security.landscape.json
 ]
 ```
 
-Edit before running `create-service`. Preserve any other required callbacks on an existing
-customer-owned service. Keep the template's localhost entries only when needed for local use;
+Keep the template's localhost entries only when needed for local use;
 add the optional AppRouter's exact `/login/callback` if used. Never trust an entire shared domain
 such as `*.hana.ondemand.com` or `*.applicationstudio.cloud.sap`.
+
+After saving the edited file, create the new service:
+
+```bash
+cf create-service xsuaa application arc1-xsuaa -c xs-security.landscape.json
+```
+
+For an existing customer-owned service, preserve its other settings and required callbacks and
+follow [Updating xs-security.json](#updating-xs-securityjson) instead.
 
 The included `xs-security.json` defines 7 scopes:
 
@@ -297,7 +308,7 @@ It does not belong in XSUAA's callback list.
 
 | Situation | Action |
 |---|---|
-| Standard MTA deployment or optional browser UI | None: deployment registers the actual ARC-1/AppRouter callbacks. |
+| Standard MTA deployment or optional browser UI | No new callback setting: deployment registers ARC-1/AppRouter callbacks. Existing installations: check the [upgrade table](#upgrading-an-existing-deployment) first. |
 | New MCP client using Dynamic Client Registration (DCR), including a BAS workspace | Connect with the server URL. The client registers its exact callback automatically. |
 | Supported manual client, such as Copilot Studio | Follow the client setup above; its callback is accepted by ARC-1. |
 | A different client configured with the shared XSUAA client ID | Prefer its DCR mode. Editing XSUAA cannot add it to ARC-1's built-in manual-client policy. |
@@ -482,32 +493,80 @@ resources:
           redirect-uris:
             - https://gateway.example.com/arc1/oauth/callback
             - https://gateway.example.com/arc1/oauth/logged-out
-          grant-types:
-            - authorization_code
-            - refresh_token
-            - urn:ietf:params:oauth:grant-type:jwt-bearer
-          token-validity: 3600
-          refresh-token-validity: 2592000
 ```
 
-Preserve your existing grant/lifetime settings when replacing this configuration. The standard
-UI deploy helper adds the AppRouter callback and preserves this override. If the AppRouter itself
-uses an external gateway, also add its exact public `/login/callback`. A normal CF `host:` override
-needs no extra callback edits: MTA derives the URL from the route.
+Merge this block into your existing `resources:` entry; do not replace the rest of your extension.
+Extension maps merge recursively, while `redirect-uris` replaces the whole list. The grants and
+token lifetimes from `mta.yaml` remain in effect; retain any intentional customer overrides.
+The standard UI deploy helper adds the AppRouter callback and preserves this list. If the
+AppRouter itself uses an external gateway, also add its exact public `/login/callback`.
+
+A normal backend `host:`/`domain:` override needs no extra callback edits. For a backend using
+explicit `routes:`, set `ARC1_PUBLIC_URL` to the route users connect to and use the exact callback
+list above: MTA's `${default-url}` does not follow the explicit routes list.
 
 ### Upgrading an existing deployment
 
-Run a full MTA deployment with the updated descriptors to replace the shared-domain callbacks.
-Updating only the app leaves XSUAA's old policy in place. For a manually owned service, update its
-landscape file as above. Review explicit `redirect-uris` overrides as well: an old wildcard there
-wins over the new defaults. This change does not require a new service, rebind, role assignment, or
-client registration. Preserve the stable DCR signing key as on any redeploy.
+Standard MCP clients keep their server URL and registration. There is no new environment variable,
+service, rebind, or role assignment. Preserve the [stable DCR signing key](#stable-dcr-signing-key-recommended)
+as on any redeploy. The intentional compatibility change is that a client using the shared XSUAA
+client ID can no longer redirect to an arbitrary SAP CF/BAS host; use that client's DCR mode instead.
 
-The optional UI now defaults to `arc1-ui-${space-guid}` on the CF domain, so existing UI users
-should read its URL with `cf app arc1-ui-router` after deployment and update bookmarks. The UI
-deploy helper preserves an explicit `host`/`domain` or `routes` in your landscape extension and
-registers matching callbacks. Use literal hostnames in explicit routes, not module-local
-`${default-url}`/`${default-uri}` placeholders. This does not change the MCP server URL.
+Before deploying, check every row that applies to your installation:
+
+| Existing setup | Upgrade action |
+|---|---|
+| Repository MTA, ordinary CF backend route, no browser UI | Deploy the updated MTAR with your existing landscape extension. No callback edits. |
+| Optional browser UI with no explicit route in your extension | [Pin the current UI route](#keep-an-existing-ui-url) before deploying to keep bookmarks working. |
+| UI with explicit `host`/`domain`, `hosts`/`domains`, or `routes` | Keep those settings and use the UI deploy command below; the helper registers matching UI callbacks. |
+| Gateway, backend `routes`, or custom `ARC1_PUBLIC_URL` | Keep the public URL and add its exact callbacks using [Custom public URL](#custom-public-url). |
+| An existing `redirect-uris` override | Replace shared-domain wildcards with the exact ARC-1 callback and logged-out URLs. Keep any required AppRouter callback. The override wins over the new defaults. |
+| Manually managed XSUAA | Its owner updates the landscape JSON as described [above](#updating-xs-securityjson), retaining its app name, scopes, grants and lifetimes, then deploys the updated ARC-1 app. |
+| No XSUAA authentication | No callback migration is required. |
+
+For an MTA-owned installation, follow the [normal update procedure](updating.md#updating-on-btp)
+with the updated descriptors and your existing extension. Update both XSUAA and the app: an
+app-only push or restage leaves the old XSUAA policy in place. For the optional UI, build with
+`npm run btp:build-ui-ext`, inspect the artifact as in the deployment runbook, then run
+`npm run btp:deploy-ui-ext`. That command generates `mta-ui-deploy.mtaext` from your
+`mta-overrides.mtaext`; edit the source extension, since the generated file is overwritten.
+
+After deployment, verify a fresh MCP login, a safe read and logout. If using the UI, verify a fresh
+login at its existing URL too. If XSUAA reports an invalid redirect, compare the rejected URL with
+the exact registered list and correct that URL; do not restore a shared-domain wildcard.
+
+**Blue-green deployments:** `${default-url}` can refer to the temporary idle route during testing.
+Keep the stable public `ARC1_PUBLIC_URL` and register its exact callbacks explicitly. If you also
+test OAuth at an idle URL, register those exact temporary callbacks during the test and remove
+them afterward. Check both the test route and the production route before completing the switch.
+
+#### Keep an existing UI URL
+
+Read the current route **before** upgrading:
+
+```bash
+cf app arc1-ui-router
+```
+
+Merge it into the existing `arc1-ui-router` module in `mta-overrides.mtaext`. For example, if the
+route shown is `old-ui.cfapps.eu10.hana.ondemand.com`:
+
+```yaml
+modules:
+  - name: arc1-ui-router
+    parameters:
+      host: old-ui
+      domain: cfapps.eu10.hana.ondemand.com
+```
+
+Use the actual route from your space; do not copy the example hostname. If you already use
+`routes:` or plural `hosts:`/`domains:`, retain those instead of adding a competing singular host.
+The UI helper preserves these settings and registers matching `/login/callback` URLs. Explicit
+routes must use actual hostnames, not module-local `${default-url}`/`${default-uri}` placeholders.
+
+Without a route override, the optional UI uses `arc1-ui-${space-guid}` on the CF domain after this
+upgrade. That changes an older default UI URL; pinning the current route avoids the change. The
+MCP backend URL is unaffected.
 
 ## Calling ARC-1 from another BTP application
 

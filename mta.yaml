@@ -282,6 +282,10 @@ resources:
           redirect-uris:
             - ~{arc1-mcp-api/url}/oauth/callback
             - ~{arc1-mcp-api/url}/oauth/logged-out
+          # The deploy service merges path/config only at the top level: this
+          # object replaces the one in xs-security.json. Keep its grants/TTLs.
+          # .mtaext overrides merge recursively, so extensions need only the
+          # redirect-uris list (or the specific grant/TTL they intend to change).
           grant-types:
             - authorization_code
             - refresh_token

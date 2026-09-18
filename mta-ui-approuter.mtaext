@@ -25,11 +25,5 @@ resources:
             - ~{arc1-mcp-api/url}/oauth/callback
             - ~{arc1-mcp-api/url}/oauth/logged-out
             - https://arc1-ui-${space-guid}.${default-domain}/login/callback
-          grant-types:
-            - authorization_code
-            - refresh_token
-            - urn:ietf:params:oauth:grant-type:jwt-bearer
-          token-validity: 3600
-          refresh-token-validity: 2592000
     requires:
       - name: arc1-mcp-api

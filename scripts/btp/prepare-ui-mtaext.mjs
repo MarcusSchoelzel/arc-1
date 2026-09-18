@@ -50,18 +50,24 @@ function withUiExtension(descriptor) {
     ...(router['build-parameters'] ?? {}),
     'supported-platforms': ['CF'],
   };
-  // Read the shipped descriptors so callback/grant defaults have one source.
+  // Read the shipped descriptors so callback defaults have one source.
   const base = YAML.parse(readFileSync(new URL('../../mta.yaml', import.meta.url), 'utf8'));
   const ui = YAML.parse(readFileSync(new URL('../../mta-ui-approuter.mtaext', import.meta.url), 'utf8'));
   const baseOauth = base.resources.find((entry) => entry.name === 'arc1-xsuaa').parameters.config['oauth2-configuration'];
   const uiXsuaa = ui.resources.find((entry) => entry.name === 'arc1-xsuaa');
   const uiRouter = ui.modules.find((entry) => entry.name === 'arc1-ui-router');
-  router.parameters = { ...uiRouter.parameters, ...router.parameters };
-  // Explicit CF routes take precedence over host/domain. Derive callbacks only
-  // for routes this deploy actually maps, and never overwrite an operator host.
-  const routes = router.parameters.routes ?? [
-    `${router.parameters.host}.${router.parameters.domain ?? '${default-domain}'}`,
-  ];
+  router.parameters ??= {};
+  const params = router.parameters;
+  // CF prefers routes over host/domain, and plural values over singular ones.
+  // Never introduce a default host alongside an operator's routes or hosts.
+  if (params.routes == null && params.hosts == null && params.host == null && !params['no-hostname']) {
+    params.host = uiRouter.parameters.host;
+  }
+  const hosts = params['no-hostname'] ? [''] : (params.hosts ?? [params.host]);
+  const domains = params.domains ?? [params.domain ?? '${default-domain}'];
+  const routes = params['no-route'] ? [] : (params.routes ?? domains.flatMap((domain) =>
+    hosts.map((host) => `${host ? `${host}.` : ''}${domain}${params['route-path'] ?? ''}`),
+  ));
   const uiRedirects = routes.map((entry) => {
     const route = typeof entry === 'string' ? entry : entry.route;
     if (
@@ -80,7 +86,6 @@ function withUiExtension(descriptor) {
     config: {
       ...xsuaaConfig,
       'oauth2-configuration': {
-        ...baseOauth,
         ...existingOauth,
         'redirect-uris': [
           ...new Set([

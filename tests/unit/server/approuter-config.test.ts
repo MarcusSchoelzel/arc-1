@@ -203,7 +203,7 @@ describe('BTP UI AppRouter config', () => {
     }
   });
 
-  it('uses the shipped OAuth defaults when no operator extension exists', async () => {
+  it('uses the shipped UI defaults and inherits base OAuth settings when no operator extension exists', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'arc1-ui-mtaext-'));
     try {
       const outputPath = join(tempDir, 'output.mtaext');
@@ -216,6 +216,7 @@ describe('BTP UI AppRouter config', () => {
       const shipped = parse(await readFile('mta-ui-approuter.mtaext', 'utf8'));
       expect(generated.resources).toEqual(shipped.resources);
       expect(generated.modules).toEqual(shipped.modules);
+      expect(Object.keys(generated.resources[0].parameters.config['oauth2-configuration'])).toEqual(['redirect-uris']);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -229,6 +230,31 @@ describe('BTP UI AppRouter config', () => {
     {
       parameters: { routes: [{ route: 'ui.example.com' }, { route: 'https://gateway.example.com/arc1/' }] },
       callbacks: ['https://ui.example.com/login/callback', 'https://gateway.example.com/arc1/login/callback'],
+    },
+    {
+      parameters: { hosts: ['existing-ui', 'second-ui'], domain: 'example.com' },
+      callbacks: ['https://existing-ui.example.com/login/callback', 'https://second-ui.example.com/login/callback'],
+    },
+    {
+      parameters: {
+        host: 'ignored',
+        hosts: ['ui'],
+        domain: 'ignored.example',
+        domains: ['one.example', 'two.example'],
+      },
+      callbacks: ['https://ui.one.example/login/callback', 'https://ui.two.example/login/callback'],
+    },
+    {
+      parameters: { host: 'ui', domain: 'example.com', 'route-path': '/arc1' },
+      callbacks: ['https://ui.example.com/arc1/login/callback'],
+    },
+    {
+      parameters: { 'no-hostname': true, domain: 'ui.example.com' },
+      callbacks: ['https://ui.example.com/login/callback'],
+    },
+    {
+      parameters: { 'no-route': true },
+      callbacks: [],
     },
   ])('derives callbacks from the operator route settings: $parameters', async ({ parameters, callbacks }) => {
     const tempDir = await mkdtemp(join(tmpdir(), 'arc1-ui-routes-'));
@@ -252,6 +278,11 @@ describe('BTP UI AppRouter config', () => {
       expect(
         generated.modules.find((module: Record<string, any>) => module.name === 'arc1-ui-router').parameters,
       ).toMatchObject(parameters);
+      if ('hosts' in parameters || 'routes' in parameters) {
+        expect(
+          generated.modules.find((module: Record<string, any>) => module.name === 'arc1-ui-router').parameters.host,
+        ).toBe('host' in parameters ? parameters.host : undefined);
+      }
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
