@@ -104,10 +104,9 @@ the final XSUAA broker payload.
 
 - `xs-security.json` conflicts with #813, which removes three lines from the list this PR replaces.
   Take this PR's list.
-- After rebasing onto #813, drop the `keeps the IDE callbacks in the runtime allowlist ARC-1
-  validates against` assertion in `tests/unit/server/mta-descriptor.test.ts`: it asserts
-  `@arc-mcp/xsuaa-auth`'s default constants, which this PR stops using. The equivalent round trip
-  over all seven supported manual callbacks lives in `oauth-redirect-policy.test.ts`.
+- #813's follow-up already removed the dependency-default assertion. Its descriptor guard
+  remains compatible with this PR. The round trip over all seven supported manual callbacks
+  lives in `oauth-redirect-policy.test.ts`; no temporary assertion still needs deleting.
 - If this merges before 1.3.1 ships, add a row to the `## 1.3.1` section that #813 seeds, linking
   the upgrade table.
 
@@ -115,3 +114,8 @@ The existing runtime fix remains the simplest correction; no further runtime
 change was justified. Full deployed ARC-1/AppRouter login and token exchange
 remain unverified because of the route quota. No existing app or service was
 modified. The temporary deployment is removed after the checks.
+
+Follow-up review reran 30 production-route OAuth and MTA descriptor tests locally; all passed.
+The R20 redirect-policy risk is supported by the route evidence. Full token-compromise impact
+depends on the flow's consent, PKCE and token-exchange controls and was not established by the
+callback tests. GitHub CI runs were excluded from this review.
