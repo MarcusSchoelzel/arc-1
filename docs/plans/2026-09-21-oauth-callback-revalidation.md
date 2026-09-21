@@ -104,6 +104,10 @@ the final XSUAA broker payload.
 
 - `xs-security.json` conflicts with #813, which removes three lines from the list this PR replaces.
   Take this PR's list.
+- A local `git merge-tree` check also finds conflicts in `docs_page/xsuaa-setup.md`. Preserve this
+  PR's exact deployment callback setup, public-URL prefix and upgrade guidance, and retain #813's
+  HTTP(S)-only warning and malformed-redirect troubleshooting. Describe the client gate as ARC-1's
+  runtime policy after combining them. Selecting either complete side would lose useful guidance.
 - #813's follow-up already removed the dependency-default assertion. Its descriptor guard
   remains compatible with this PR. The round trip over all seven supported manual callbacks
   lives in `oauth-redirect-policy.test.ts`; no temporary assertion still needs deleting.
