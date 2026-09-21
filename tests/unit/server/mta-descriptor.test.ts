@@ -198,7 +198,7 @@ describe('shipped mta.yaml resolves through the config parser', () => {
     );
   });
 
-  it('registers only deployment-owned OAuth paths and keeps the optional UI out of the base requirements', () => {
+  it('registers only deployment-owned OAuth paths and keeps the optional UI out of the base requirements (#812)', () => {
     const xsuaa = resourceDescriptor('arc1-xsuaa');
     const file = JSON.parse(readFileSync(join(ROOT, 'xs-security.json'), 'utf8'));
     expect(xsuaa.requires).toEqual([{ name: 'arc1-mcp-api' }]);
