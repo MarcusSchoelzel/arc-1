@@ -72,6 +72,45 @@ the final XSUAA broker payload.
   `scan-manifest.json: expected a file inside the scan directory`; its semantic
   draft was subsequently saved, but no completed scan is claimed.
 
+## Independent revalidation (second reviewer, 2026-09-21)
+
+- Removing only `redirectUriPatterns` from the `createXsuaaOAuthProvider` call again fails exactly
+  four of the production-route tests — the two shared-platform hosts at `/authorize`, and the two
+  replayed signed states at `/oauth/callback`. Restoring it passes. `npm test`: 6,924 tests in
+  225 files. Typecheck, build, lint (two pre-existing informational notices), `validate:policy`,
+  `check:sizes`, all five `mbt validate` combinations and strict MkDocs pass.
+- Live XSUAA on CF `us10-001` / `abap-dev`, disposable unbound instances, deleted with their keys
+  afterwards:
+  - This PR's shipped `xs-security.json` (`http://localhost:*/oauth/{callback,logged-out}`) is
+    accepted by the broker; `prompt=none` returns HTTP 302 `login_required` for
+    `http://localhost:6274/oauth/callback` and `http://localhost:3000/oauth/logged-out`, and
+    HTTP 400 for a path suffix, for `http://127.0.0.1:6274/oauth/callback` and for an https host.
+  - With the two exact deployed callbacks registered (the shape `mta.yaml` produces), `prompt=none`
+    returns 302 `login_required` for both, and 400 with no redirect for
+    `…/oauth/callback/extra`, for a foreign `*.cfapps.us10-001.hana.ondemand.com` host and for a
+    `*.applicationstudio.cloud.sap` host.
+  - XSUAA matches a registered entry **exactly** — no implicit path wildcard. That is what makes
+    the `ARC1_PUBLIC_URL` prefix guidance in the docs load-bearing, not optional.
+- Added **R20** to the residual-risk register and extended the redirect-allowlist row of the
+  per-PR review checklist, so the reason this list is narrow survives the next reviewer.
+- Kept the runtime change, the descriptor narrowing and the UI helper's route handling. The
+  helper's `routes` / plural `hosts` / `domains` support is upgrade compatibility for operators who
+  already override the UI route, not speculative generality; the shipped default path produces the
+  same descriptor before and after.
+- Still not covered: a deployed ARC-1/AppRouter login and token exchange (CF route quota), and an
+  installed IDE session. No completed security-plugin scan is claimed.
+
+### Merge interactions
+
+- `xs-security.json` conflicts with #813, which removes three lines from the list this PR replaces.
+  Take this PR's list.
+- After rebasing onto #813, drop the `keeps the IDE callbacks in the runtime allowlist ARC-1
+  validates against` assertion in `tests/unit/server/mta-descriptor.test.ts`: it asserts
+  `@arc-mcp/xsuaa-auth`'s default constants, which this PR stops using. The equivalent round trip
+  over all seven supported manual callbacks lives in `oauth-redirect-policy.test.ts`.
+- If this merges before 1.3.1 ships, add a row to the `## 1.3.1` section that #813 seeds, linking
+  the upgrade table.
+
 The existing runtime fix remains the simplest correction; no further runtime
 change was justified. Full deployed ARC-1/AppRouter login and token exchange
 remain unverified because of the route quota. No existing app or service was
