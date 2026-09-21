@@ -2,7 +2,7 @@
 
 <a id="xsuaa-callback-hardening"></a>
 
-## Unreleased — XSUAA callback hardening
+## v1.4.0 — XSUAA callback hardening
 
 Standard MCP clients keep their URL and registration. Perform a full MTA deployment so XSUAA
 and the app both receive the restricted policies. Before upgrading, use the

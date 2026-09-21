@@ -38,16 +38,14 @@ Deployed ARC-1/AppRouter login, token exchange and installed IDE sessions remain
 because of route quota. No completed security-plugin scan is claimed. R20's critical impact is
 conditional on code exchangeability; these callback checks did not establish token compromise.
 
-## Merge interactions
+## Integration with current main
 
-- `xs-security.json` conflicts with #813: keep #678's exact callback list. Its exact-list test
-  carries #812 and subsumes #813's scheme-only describe. `mta-descriptor.test.ts` auto-merges
-  and keeps both; deliberately delete `shipped xs-security.json redirect schemes (#812)`.
-- `git merge-tree` also finds `docs_page/xsuaa-setup.md` conflicts. Combine #678's deployment,
-  public-prefix and upgrade instructions with #813's HTTP(S)-only warning and troubleshooting.
-  Describe the client gate as ARC-1's runtime policy; taking either complete file loses guidance.
-- If included in the pending release, add a row to #813's release-note section and link the
-  upgrade table and replace the `Unreleased` heading in `updating.md` with the actual version.
-  #811 regenerated as 1.4.0 after #829; recheck its version before reconciliation.
+- The #813 conflicts are resolved with #678's exact callback list and both guides' instructions:
+  deployment, public prefixes and upgrades, plus the HTTP(S)-only warning and troubleshooting.
+  The client gate is described as ARC-1's runtime policy. The exact-list test retains #812;
+  #813's redundant scheme-only describe was removed even though the test file auto-merged.
+- The pending release is 1.4.0. Its annotated notes include #678 and link to the upgrade table;
+  `updating.md` identifies the same version while preserving the callback-hardening anchor.
+  Recheck #811 after release-please regenerates it from the merged change.
 
 Roadmap: no impact; SEC-15/SEC-16 and broader provider consent remain separate work.

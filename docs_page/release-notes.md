@@ -18,6 +18,21 @@ currently [multi-target mode](multi-target-setup.md), may still change in a mino
 `1.0.0` onward and every `0.9` release are listed individually. `0.1`–`0.8` are summarized, with the
 important `0.7.0` authorization migration retained below.
 
+<!-- Prefer a main-bound PR; use the release branch only for final preparation after its inputs land.
+     release-please rebuilds that branch from main with `force: true`, so a commit added there is
+     lost the next time a feat:/fix: merges. See .claude/commands/release-notes.md. -->
+
+## 1.4.0 — extension reports and compatibility fixes (2026-09-21)
+
+| Change | Impact | Action |
+|---|---|---|
+| Extension report execution ([#829](https://github.com/arc-mcp/arc-1/pull/829)) | Extensions can call `ctx.run.programRun(name)` to run an active classic ABAP report and return its list output. Selection parameters and variants are not supported. | Optional: requires `SAP_ALLOW_PLUGIN_EXECUTE=true`, `SAP_ALLOW_WRITES=true`, and a `write`-scoped tool; see [Extensions](extensions.md). |
+| XSUAA redirect URIs ([#813](https://github.com/arc-mcp/arc-1/pull/813)) | `xs-security.json` no longer lists the `cursor://` and `vscode://` redirect URIs that XSUAA now rejects on `cf create-service` and `cf update-service` (`Malformed redirect URIs detected`). IDE callback validation remains in ARC-1. | MTA: rebuild and redeploy. Manual XSUAA: remove those entries from the complete landscape descriptor before creating or updating the service; preserve the other settings. |
+| OAuth callback hardening ([#678](https://github.com/arc-mcp/arc-1/pull/678)) | XSUAA callbacks are restricted to your deployment. Clients using the shared manual client ID can no longer redirect to arbitrary CF/BAS tenants. | Follow the [upgrade table](xsuaa-setup.md#upgrading-an-existing-deployment) before a full deployment: register custom public callbacks, preserve existing UI routes, and use DCR for custom CF/BAS clients. |
+| Connectivity session reuse ([#807](https://github.com/arc-mcp/arc-1/pull/807)) | One Connectivity proxy client is kept for the whole stateful SAP operation, including the closing request, preventing premature client disposal from causing `Service cannot be reached` during these writes. | Upgrade the deployed server; no configuration change. |
+| Server-driven where-used ([#809](https://github.com/arc-mcp/arc-1/pull/809)) | `SAPNavigate(action="references")` now queries the correct object URI for server-driven types such as `DSFD`, avoiding misleading empty results from a program lookup. | `none` |
+| Older ADT backends ([#828](https://github.com/arc-mcp/arc-1/pull/828)) | Authentication/CSRF bootstrap can fall back to legacy discovery. Empty or unexpected CTS responses now produce an explanatory error instead of claiming no transports or a missing request. | No configuration change. Consumers must handle the CTS error; successful bootstrap does not establish support for every tool on an older backend. |
+
 ## 1.3.0 — CI, safer writes, and runtime fixes (2026-09-17)
 
 Adds quality gates, bounded relations, safer authoring, and clearer partial-result evidence. Defaults need
