@@ -90,7 +90,7 @@ The included `xs-security.json` defines 7 scopes:
 | `admin`        | Implies ALL other scopes at runtime                            | Everything                                                                                   |
 
 The MTA additionally defines 7 role collections (assignable in BTP Cockpit). The manual
-`create-service` command above reads only `xs-security.json`; it does not apply the collections in
+`create-service` command above reads only `xs-security.landscape.json`; it does not apply the collections in
 `mta.yaml`. A manual owner must create the required collections and add the current application
 roles before assigning users.
 

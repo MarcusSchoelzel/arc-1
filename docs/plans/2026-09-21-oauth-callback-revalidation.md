@@ -41,11 +41,13 @@ conditional on code exchangeability; these callback checks did not establish tok
 ## Merge interactions
 
 - `xs-security.json` conflicts with #813: keep #678's exact callback list. Its exact-list test
-  carries #812 and subsumes #813's scheme-only describe; delete that describe when combining.
+  carries #812 and subsumes #813's scheme-only describe. `mta-descriptor.test.ts` auto-merges
+  and keeps both; deliberately delete `shipped xs-security.json redirect schemes (#812)`.
 - `git merge-tree` also finds `docs_page/xsuaa-setup.md` conflicts. Combine #678's deployment,
   public-prefix and upgrade instructions with #813's HTTP(S)-only warning and troubleshooting.
   Describe the client gate as ARC-1's runtime policy; taking either complete file loses guidance.
 - If included in the pending release, add a row to #813's release-note section and link the
-  upgrade table. #811 regenerated as 1.4.0 after #829; recheck its version before reconciliation.
+  upgrade table and replace the `Unreleased` heading in `updating.md` with the actual version.
+  #811 regenerated as 1.4.0 after #829; recheck its version before reconciliation.
 
 Roadmap: no impact; SEC-15/SEC-16 and broader provider consent remain separate work.
